@@ -164,6 +164,9 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 		_addCSSRule(topsheet, '.ta-root .ta-resizer-handle-overlay > .ta-resizer-handle-corner-tr', 'top: 0; right: 0; border-right: 1px solid black; border-top: 1px solid black;');
 		_addCSSRule(topsheet, '.ta-root .ta-resizer-handle-overlay > .ta-resizer-handle-corner-bl', 'bottom: 0; left: 0; border-left: 1px solid black; border-bottom: 1px solid black;');
 		_addCSSRule(topsheet, '.ta-root .ta-resizer-handle-overlay > .ta-resizer-handle-corner-br', 'bottom: 0; right: 0; border: 1px solid black; cursor: se-resize; background-color: white;');
+
+		//placeholder
+		_addCSSRule(topsheet, '.ta-placeholder', 'position: absolute;top: 6px;left: 11px;color: #999;pointer-events:none;');
 	}
 
 	// recursive function that returns an array of angular.elements that have the passed attribute set on them
@@ -910,6 +913,7 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 				var _isInputFriendly = _isContentEditable || element[0].tagName.toLowerCase() === 'textarea' || element[0].tagName.toLowerCase() === 'input';
 				var _isReadonly = false;
 				var _focussed = false;
+				var placeholderElement;
 
 				// defaults to the paragraph element, but we need the line-break or it doesn't allow you to type into the empty element
 				// non IE is '<p><br/></p>', ie is '<p></p>' as for once IE gets it correct...
@@ -942,6 +946,13 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 					throw ('textAngular Error: attempting to update non-editable taBind');
 				};
 
+				function updatePlaceholder() {
+					if(placeholderElement){
+						var strippedNewModelValue = element[0].innerHTML.replace(/(<([^>]+)>)/ig,"");
+						(strippedNewModelValue)?placeholderElement.hide():placeholderElement.show();
+					}
+				}
+
 				//used for updating when inserting wrapped elements
 				scope.$parent['updateTaBind' + (attrs.id || '')] = function(){
 					if(!_isReadonly) ngModel.$setViewValue(_compileHtml());
@@ -951,6 +962,7 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 				if(_isInputFriendly){
 					if(!_isContentEditable){
 						element.on('paste cut', function(){
+						  updatePlaceholder();
 							// timeout to next is needed as otherwise the paste/cut event has not finished actually changing the display
 							if(!_isReadonly) $timeout(function(){
 								ngModel.$setViewValue(_compileHtml());
@@ -958,10 +970,12 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 						});
 						// if a textarea or input just add in change and blur handlers, everything else is done by angulars input directive
 						element.on('change blur', function(){
+							updatePlaceholder();
 							if(!_isReadonly) ngModel.$setViewValue(_compileHtml());
 						});
 					}else{
 						element.on('cut', function(e){
+							updatePlaceholder();
 							// timeout to next is needed as otherwise the paste/cut event has not finished actually changing the display
 							if(!_isReadonly)
 								$timeout(function(){
@@ -970,6 +984,7 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 							else e.preventDefault();
 						});
 						element.on('paste', function(e, eventData){
+							updatePlaceholder();
 							/* istanbul ignore else: this is for catching the jqLite testing*/
 							if(eventData) angular.extend(e, eventData);
 							var text;
@@ -1000,7 +1015,11 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 						});
 
 						// all the code specific to contenteditable divs
+						element.on('keydown', function(event, eventData) {
+							updatePlaceholder();
+						});
 						element.on('keyup', function(event, eventData){
+							updatePlaceholder();
 							/* istanbul ignore else: this is for catching the jqLite testing*/
 							if(eventData) angular.extend(event, eventData);
 							if(!_isReadonly){
@@ -1026,6 +1045,7 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 						});
 
 						element.on('blur', function(){
+							updatePlaceholder();
 							_focussed = false;
 							var val = _compileHtml();
 							/* istanbul ignore else: if readonly don't update model */
@@ -1038,19 +1058,9 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 
 						// Placeholders not supported on ie 8 and below
 						if(attrs.placeholder && (ie > 8 || ie === undefined)){
-							var ruleIndex;
-							if(attrs.id) ruleIndex = addCSSRule('#' + attrs.id + '.placeholder-text:before', 'content: "' + attrs.placeholder + '"');
-							else throw('textAngular Error: An unique ID is required for placeholders to work');
-
-							scope.$on('$destroy', function(){
-								removeCSSRule(ruleIndex);
-							});
+							placeholderElement = $('<span class="ta-placeholder">' + attrs.placeholder + '</span>');
+							element.after(placeholderElement);
 						}
-
-						element.on('focus', function(){
-							_focussed = true;
-							ngModel.$render();
-						});
 					}
 				}
 
@@ -1108,12 +1118,11 @@ See README.md or https://github.com/fraywing/textAngular/wiki for requirements a
 							if(attrs.placeholder){
 								if(val === ''){
 									// blank
-									if(_focussed) element.removeClass('placeholder-text');
-									else element.addClass('placeholder-text');
+									placeholderElement.show();
 									element[0].innerHTML = _defaultVal;
 								}else{
 									// not-blank
-									element.removeClass('placeholder-text');
+									placeholderElement.hide();
 									element[0].innerHTML = val;
 								}
 							}else{
